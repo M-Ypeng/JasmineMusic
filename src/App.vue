@@ -2,12 +2,12 @@
   <div id="app">
     <div class="player">
       <div class="p_left" @click="showBig">
-        <img width="40" height="40" :src="imgUrl" />
+        <img style="border-radius: 5px;" width="40" height="40" :src="imgUrl" />
         <span class="p_txt"
           >{{ music.name }} -
           <span v-for="(v, index) in music.ar" :key="v.id"
             >{{ v.name }}
-            <span v-if="index != music.ar.length - 1 || playBool">-</span></span
+            <span v-if="index != music.ar.length - 1">-</span></span
           >
         </span>
       </div>
@@ -93,6 +93,10 @@
     <van-action-sheet v-model="playShow">
       <template #default>
         <div class="boxPlay">
+          <div
+            class="boxPlayBg"
+            :style="{ backgroundImage: `url(${imgUrl})` }"
+          ></div>
           <div class="boxPlayTitle">
             <div class="">
               <van-icon
@@ -112,18 +116,20 @@
           </div>
 
           <div class="lyricBox">
-            <div ref="pickBox" class="pickBox"></div>
             <div ref="circleBox" class="circleBox">
               <img class="circleBoxImg" :src="imgUrl" alt="" />
             </div>
           </div>
           <div class="controlBox">
             <div class="progressBar">
-              <div class="time">00:00</div>
-              <div class="progress">
+              <div class="time">{{currentTime | dateFormat }}</div>
+              <!-- <div class="progress">
                 <div class="smallprogress"></div>
-              </div>
-              <div class="time">05:59</div>
+              </div> -->
+
+              <van-progress color="#fff" track-color="#5c574d" :show-pivot="false" style=" width: calc(100% - 120px);" :percentage="cd" stroke-width="2" />
+
+              <div class="time">{{ duration | dateFormat }}</div>
             </div>
             <div class="btnBoxs">
               <svg
@@ -227,14 +233,45 @@ export default {
       autoplay: false,
       music: {},
       imgUrl: require("./assets/音乐.png"),
+      duration: 0, //歌曲时长
+      timer: null,
+      currentTime: 0,
+      cd:0,
     };
   },
+  // watch: {
+  //   playBool: {
+  //     handler: function (val) {
+  //       if (val) {
+  //         this.$refs.circleBox.style.animationPlayState = "running";
+  //       } else {
+  //         this.$refs.circleBox.style.animationPlayState = "paused";
+  //       }
+  //     },
+  //   },
+  // },
   methods: {
+    changeplayBool() {
+      this.$nextTick(() => {
+        if (this.playBool  ) {
+          this.$refs.circleBox.style.animationPlayState = "running";
+        } else {
+          this.$refs.circleBox.style.animationPlayState = "paused";
+        }
+      });
+    },
+
     cancleIcon() {
       this.playShow = false;
     },
     showBig() {
       this.playShow = true;
+      this.changeplayBool();
+      this.$nextTick(() => {
+        if(this.playBool){
+          this.getCurrentTime(); // 获取当前时间
+        }
+      });
     },
     onChange(e) {
       if (e == 0) {
@@ -259,35 +296,42 @@ export default {
       if (!this.url) return;
       this.$refs.audio.pause();
       this.playBool = false;
-      this.$refs.circleBox.style.animationPlayState = "paused";
-      this.$refs.pickBox.style.transform = "rotate(-20deg)";
-      this.$refs.pickBox.style.transition = "all 0.4s";
+      this.changeplayBool();
+      if (this.timer) {
+        clearInterval(this.timer);
+      }
     },
     play() {
       if (!this.url) return;
       this.$refs.audio.play();
       this.playBool = true;
-      this.$refs.circleBox.style.animationPlayState = "running";
-      this.$refs.pickBox.style.transform = "rotate(20deg)";
-      this.$refs.pickBox.style.transition = "all 0.4s";
+      this.changeplayBool();
+      this.getCurrentTime(); // 获取当前时间
     },
-
     async getSong(e) {
-      let res = await songdetail(e);
-      let res2 = await songUrldetail(e);
-      if (res.code == 200) {
-        this.music = res.songs[0];
+      let p1 = await songdetail(e);
+      let p2 = await songUrldetail(e);
+      Promise.all([p1, p2]).then((res) => {
+        this.music = res[0].songs[0];
         this.imgUrl = this.music.al.picUrl;
-      }
-      if (res2.code == 200) {
-        this.url = res2.data[0].url;
+        this.$refs.audio.oncanplay = () => {
+          this.duration = this.$refs.audio.duration;
+        };
+        this.url = res[1].data[0].url;
         this.autoplay = true;
         this.playBool = true;
-      }
+      });
     },
-
     endedFun() {
       this.playBool = false;
+    },
+
+    // 监听歌曲播发时长
+    getCurrentTime() {
+      this.timer = window.setInterval(() => {
+        this.currentTime = this.$refs.audio.currentTime;
+        this.cd = (this.currentTime / this.duration).toFixed(2)*100
+      }, 999);
     },
   },
 };
@@ -328,14 +372,25 @@ export default {
   border-radius: 3px;
 }
 .boxPlay {
+  overflow: hidden;
   position: fixed;
   width: 100%;
   height: 100vh;
   left: 0px;
   top: 0px;
-  background: black;
   padding: 10px;
   box-sizing: border-box;
+  background-color: #262626;
+}
+.boxPlayBg {
+  position: fixed;
+  width: 100%;
+  height: 100vh;
+  left: 0px;
+  top: 0px;
+  filter: blur(30px);
+  background-size: cover;
+  z-index: -1;
 }
 .boxPlayTitle {
   display: flex;
@@ -364,24 +419,12 @@ export default {
   white-space: nowrap;
   text-overflow: ellipsis;
   -o-text-overflow: ellipsis;
-  color: rgb(168, 167, 167);
+  color: rgb(221, 218, 218);
 }
 .lyricBox {
   width: 100%;
-  height: 500px;
+  height: 450px;
   position: relative;
-}
-.pickBox {
-  position: absolute;
-  left: 47%;
-  top: 0px;
-  width: 100px;
-  height: 164px;
-  background-image: url("./assets/needle-ab.png");
-  background-size: 100px;
-  transform-origin: 5px 5px;
-  transform: rotate(-20deg);
-  z-index: 99;
 }
 
 .circleBox {
@@ -417,6 +460,7 @@ export default {
 .progressBar {
   display: flex;
   align-items: center;
+  margin-bottom: 24px;
 }
 .progress {
   width: calc(100% - 120px);
@@ -436,6 +480,7 @@ export default {
 .time {
   width: 60px;
   text-align: center;
+  color: white;
 }
 .btnBoxs {
   display: flex;
